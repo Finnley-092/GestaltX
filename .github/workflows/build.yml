@@ -1,0 +1,47 @@
+
+name: Build GestaltX IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: macos-26
+
+    steps:
+      - name: Download source
+        uses: actions/checkout@v4
+
+      - name: Find Xcode scheme
+        id: scheme
+        run: |
+          xcodebuild -list -json -project GestaltX.xcodeproj > schemes.json
+          SCHEME=$(python3 -c "import json; d=json.load(open('schemes.json')); print(next(s for s in d['project']['schemes'] if 'GestaltX' in s))")
+          echo "name=$SCHEME" >> "$GITHUB_OUTPUT"
+
+      - name: Build app
+        run: |
+          xcodebuild \
+            -project GestaltX.xcodeproj \
+            -scheme "${{ steps.scheme.outputs.name }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name "*.app" -print -quit)
+          mkdir Payload
+          cp -R "$APP" Payload/
+          zip -r GestaltX.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestaltX-IPA
+          path: GestaltX.ipa
